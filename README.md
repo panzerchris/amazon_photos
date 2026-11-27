@@ -1,180 +1,103 @@
 # Amazon Photos API
 
-## Table of Contents
-
-<!-- TOC -->
-
-* [Installation](#installation)
-* [Setup](#setup)
-* [Examples](#examples)
-* [Search](#search)
-* [Nodes](#nodes)
-    * [Restrictions](#restrictions)
-    * [Range Queries](#range-queries)
-* [Notes](#notes)
-    * [Known File Types](#known-file-types)
-* [Custom Image Labeling (Optional)](#custom-image-labeling-optional)
-
-<!-- TOC -->
-
-> It is recommended to use this API in a [Jupyter Notebook](https://jupyter.org/install), as the results from most
-> endpoints
-> are a [DataFrame](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html#pandas.DataFrame)
-> which can be neatly displayed and efficiently manipulated with vectorized ops. This becomes
-> increasingly important if you have "large" amounts of data (e.g. >1 million photos/videos).
+An unofficial Python library for listing, uploading, downloading and organizing media in Amazon Photos. It uses the web application's private endpoints and credentials from your own browser session. See [authentication and live verification](docs/authentication.md) for the available UK evidence.
 
 ## Installation
 
-```bash
-pip install amazon-photos -U
+Install from a checkout of this fork on CPython 3.11–3.14.
+
+```sh
+python -m pip install .
 ```
 
-### Output Examples
+Use `python -m pip install '.[extras]'` to install the optional image-labeling dependencies.
 
-`ap.db`
+## Authentication and region
 
-|   | dateTimeDigitized        | id                     | name              | ... | model             | apertureValue | focalLength | width | height |   size |
-|--:|:-------------------------|:-----------------------|:------------------|:----|:------------------|:--------------|:------------|------:|-------:|-------:|
-| 0 | 2019-07-06T18:22:00.000Z | HeMReF-vvJiTTkdPIeWuoP | 1694252973839.png | ... | iPhone XS         | 54823/32325   | 17/4        |  3024 |   4032 | 432777 |
-| 1 | 2023-01-18T09:36:22.000Z | z_HiIvASAKqWmdrkjWiqMZ | 1692626817154.jpg | ... | iPhone XS         | 54823/32325   | 17/4        |  3024 |   4032 | 234257 |
-| 2 | 2022-08-14T14:13:21.000Z | LKXEZbqoVrhrOYBezisGEQ | 1798219686789.jpg | ... | iPhone 11 Pro Max | 54823/32325   | 17/4        |  3024 |   4032 | 423987 |
-| 3 | 2020-06-28T19:32:30.000Z | EPUeciHtfKkGiYkfUyEuMa | 1593482220567.jpg | ... | iPhone XS         | 54823/32325   | 17/4        |  3024 |   4032 | 898957 |
-| 4 | 2021-07-07T17:12:55.000Z | fdfKzRJbEyoVeGcfCoJgE- | 1592299282720.png | ... | iPhone XR         | 54823/32325   | 17/4        |  3024 |   4032 | 432556 |
-| 5 | 2021-08-18T18:32:41.000Z | crskJSmKPFRhxbpfkivyLm | 1592902159105.png | ... | iPhone XR         | 54823/32325   | 17/4        |  3024 |   4032 | 123123 |
-| 6 | 2023-08-23T19:12:21.000Z | qkBFUlyIdkUwVVSaVWWKEF | 1598138358650.png | ... | iPhone 11         | 54823/32325   | 17/4        |  3024 |   4032 | 437887 |
-| 7 | 2021-06-19T17:14:13.000Z | TXKMKC-mHvSUrtRfwmtyDe | 1622199863606.jpg | ... | iPhone 12 Pro     | 14447/10653   | 21/5        |  1536 |   2048 | 758432 |
-| 8 | 2023-02-15T22:45:40.000Z | FRDvvjcZdpFWiwrIZfTNHO | 1581874518054.jpg | ... | iPhone 8 Plus     | 54823/32325   | 399/100     |  1348 |   2049 | 862883 |
+Sign in to [Amazon Photos UK](https://www.amazon.co.uk/photos) in your browser and complete any requested verification. In browser Developer Tools, select a successful Photos request in the Network tab. In the request's Cookie header, find `session-id`, `ubid-acbuk` and `at-acbuk`. Network request headers can show HttpOnly cookies that browser JavaScript cannot access.
 
-`ap.print_tree()`
+Save the corresponding values as a plain JSON object in a private file outside the repository. This example contains placeholders.
 
-```text
-~ 
-├── Documents 
-├── Pictures 
-│   ├── iPhone 
-│   └── Web 
-│       ├── foo 
-│       └── bar
-├── Videos 
-└── Backup 
-    ├── LAPTOP-XYZ 
-    │   └── Desktop 
-    └── DESKTOP-IJK 
-        └── Desktop
+```json
+{
+  "session-id": "SESSION_VALUE",
+  "ubid-acbuk": "UK_UBID_VALUE",
+  "at-acbuk": "UK_AT_VALUE"
+}
 ```
 
-## Setup
+Give the file user-only access, such as `chmod 600 /path/to/uk.cookies.json` on Unix. Set `AP_COOKIES_FILE` to its path for the examples. Pass the mapping directly to `AmazonPhotos` when loading secrets from another source.
 
-> [Update] Jan 04 2024: To avoid confusion, setting env vars is no longer supported. One must pass cookies directly as
-> shown below.
+| Marketplace | `tld` | Common cookie pair | Default upload zone |
+| --- | --- | --- | --- |
+| UK | `co.uk` | `ubid-acbuk`, `at-acbuk` | EU |
+| US | `com` | `ubid-main`, `at-main` | NA |
+| Canada | `ca` | `ubid-acbca`, `at-acbca` | NA |
+| Germany | `de` | `ubid-acbde`, `at-acbde` | EU |
+| Japan | `co.jp` | `ubid-acbjp`, `at-acbjp` | JP |
 
-Log in to Amazon Photos and copy the following cookies:
+One unambiguous marketplace can also be inferred from the cookie names. Legacy underscore aliases are accepted. Override endpoints with `drive_override` and `cdproxy_override` only for endpoints you trust with the session. `upload_api='v2'` selects the optional marketplace v2 endpoint, and `upload_override` selects a known compatible URL. No automatic fallback occurs after a write. Use `user_agent` to pass the user agent from your browser if the default profile does not work.
 
-- `session-id`
-- `ubid`*
-- `at`*
-
-### Canada/Europe
-
-where `xx` is the TLD (top-level domain)
-
-- `ubid-acbxx`
-- `at-acbxx`
-
-### United States
-
-- `ubid_main`
-- `at_main`
-
-E.g.
+## Upload and download
 
 ```python
+import json
+import os
+from pathlib import Path
+
 from amazon_photos import AmazonPhotos
 
-ap = AmazonPhotos(
-    ## US
-    # cookies={
-    #     'ubid_main': ...,
-    #     'at_main': ...,
-    #     'session-id': ...,
-    # },
+cookies = json.loads(Path(os.environ["AP_COOKIES_FILE"]).expanduser().read_text())
 
-    ## Canada
-    # cookies={
-    #     'ubid-acbca': ...,
-    #     'at-acbca': ...,
-    #     'session-id': ...,
-    # }
+with AmazonPhotos(
+    cookies,
+    tld="co.uk",
+    init_folders=False,
+    init_db=False,
+    db_path=None,
+) as photos:
+    receipts = photos.upload("new-photo.jpg", refresh=False, max_connections=1)
+    for receipt in receipts:
+        print(receipt.json()["id"])
 
-    ## Italy
-    # cookies={
-    #     'ubid-acbit': ...,
-    #     'at-acbit': ...,
-    #     'session-id': ...,
-    # }
-)
+    matches = photos.photos(limit=5)
+    if not matches.empty:
+        photos.download(matches["id"], out="downloaded", verify_checksum=True)
 ```
 
-## Examples
+A single file uploads to the account root unless you supply `parent_id`. A directory copies its local structure. The default upload checks Amazon for available files with the same MD5 and skips matching content account-wide. An empty response list means no new file was uploaded. An explicit `md5s` set substitutes caller-owned deduplication input. `skip_dedup=True` disables preflight deduplication. A filename conflict only counts as an existing copy if remote metadata confirms the checksum. The client streams the source bytes without re-encoding media or altering EXIF.
 
-> A database named `ap.parquet` will be created during the initial setup. This is mainly used to reduce upload conflicts
-> by checking your local file(s) md5 against the database before sending the request.
+Downloads write complete files atomically. `verify_checksum=True` requires a remote checksum and verifies it before publishing a local file. `query`, `photos`, `videos` and `trashed` return Pandas DataFrames. `nodes` returns a DataFrame or `None` if no rows match. Use distinct cache files for distinct accounts if you enable Parquet caching. With both initialization flags disabled, startup checks the account root and skips the eager scans.
 
-```python
-from amazon_photos import AmazonPhotos
+## Unattended execution and errors
 
-ap = AmazonPhotos(
-    # see cookie examples above
-    cookies={...},
-    # optionally cache all intermediate JSON responses
-    tmp='tmp',
-    # pandas options
-    dtype_backend='pyarrow',
-    engine='pyarrow',
-)
-
-# get current usage stats
-ap.usage()
-
-# get entire Amazon Photos library
-nodes = ap.query("type:(PHOTOS OR VIDEOS)")
-
-# query Amazon Photos library with more filters applied
-nodes = ap.query("type:(PHOTOS OR VIDEOS) AND things:(plant AND beach OR moon) AND timeYear:(2023) AND timeMonth:(8) AND timeDay:(14) AND location:(CAN#BC#Vancouver)")
-
-# sample first 10 nodes
-node_ids = nodes.id[:10]
-
-# move a batch of images/videos to the trash bin
-ap.trash(node_ids)
-
-# get trash bin contents
-ap.trashed()
-
-# permanently delete a batch of images/videos
-ap.delete(node_ids)
-
-# restore a batch of images/videos from the trash bin
-ap.restore(node_ids)
-
-# upload media (preserves local directory structure and copies to Amazon Photos root directory)
-ap.upload('path/to/files')
-
-# download a batch of images/videos
-ap.download(node_ids)
-
-# convenience method to get photos only
-ap.photos()
-
-# convenience method to get videos only
-ap.videos()
-
-# get all identifiers calculated by Amazon.
-ap.aggregations(category="all")
-
-# get specific identifiers calculated by Amazon.
-ap.aggregations(category="location")
+```sh
+AP_COOKIES_FILE=/path/to/uk.cookies.json AP_TLD=co.uk python examples/upload_one.py /path/to/image.jpg
 ```
+
+The example exits with status 0 for a confirmed upload or verified existing copy, 2 when login is needed, 3 when Amazon may have received a write whose result could not be verified, and 1 for other failures.
+
+- `AuthenticationError` indicates the session was rejected or a recognized verification page was returned. Pause uploads, sign in normally, replace the secret and start a new client. There is no verified automatic renewal mechanism for UK Amazon Photos.
+- `APIError` exposes a status code and `Retry-After`, if available. A generic 403 is distinct from a confirmed rejected session.
+- `TransportError` indicates an HTTP transfer failed. Reads use bounded retries and backoff for transient errors.
+- `UploadUncertainError` means the upload may have been committed. Keep the source and look up the remote checksum before retrying. In a batch, earlier files may already have succeeded.
+- `ProtocolError` indicates an unexpected response or integrity failure. Check the endpoint, credentials and supported request format.
+
+The client does not configure global logging. Use the `amazon_photos` logger for retry diagnostics. Keep HTTP client tracing and the optional `tmp` response snapshots off for routine runs because they can contain signed links or private metadata. TLS verification is enabled. System proxy settings are used only with `trust_env=True`.
+
+## Tests and limits
+
+```sh
+python -m unittest discover -s tests -v
+AP_LIVE=1 python -m unittest discover -s tests/live -v
+AP_LIVE=1 AP_LIVE_UPLOAD=1 python -m unittest discover -s tests/live -v
+```
+
+The first command uses synthetic cookies and mocked HTTP. The second requires a private cookie file and performs real reads. The third adds one generated test image and leaves it available for inspection. See [live test setup and the longevity protocol](docs/authentication.md). This branch has no authenticated UK upload, session lifetime or Echo Show verification yet.
+
+Node and trash listings have an upstream window of 9,999 rows. Use narrower filters for larger inventories. Remote indexing is eventually consistent, and a listing can change between pages. Cross-process uploads do not offer an exactly-once guarantee. Public methods are synchronous, with bounded internal async batches. In an asyncio application, use a worker thread for the synchronous API. This client depends on private endpoints that may change.
+
+See the [upstream PR audit](docs/upstream-audit.md), [implementation comparison](docs/alternative-implementations.md), [code audit](docs/code-audit.md) and [maintenance plan](docs/maintenance-plan.md). The library retains its [MIT licence](LICENSE).
 
 ## Search
 
