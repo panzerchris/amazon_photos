@@ -92,11 +92,9 @@ Set `AP_EXPIRED_COOKIES_FILE` to a separate file with known-expired cookies to t
 
 ## Limitations
 
-Amazon can change these private endpoints. Uploads, downloads, and duplicate handling were verified on one UK account. Automatic session renewal and Echo Show display remain unverified. Node and trash listings have a 9,999-item window. Use narrower filters for larger libraries.
+Amazon can change these private endpoints. Uploads, downloads, and duplicate handling were verified on one UK account. Automatic session renewal remains unverified. Node and trash listings have a 9,999-item window. Use narrower filters for larger libraries.
 
 The public API is synchronous. If your application uses asyncio, call it from a worker thread. Use the `amazon_photos` logger for diagnostics, and keep raw HTTP tracing off when using real credentials.
-
-Licensed under the [MIT licence](LICENSE).
 
 ## Search
 
@@ -321,3 +319,11 @@ run(
     debug=0,
 )
 ```
+
+## Credits
+
+This project is a fork of [trevorhobenshield/amazon_photos](https://github.com/trevorhobenshield/amazon_photos), originally written by Trevor Hobenshield. The commit history credits the contributors whose fixes are included in this fork.
+
+## License
+
+[MIT](LICENSE)
