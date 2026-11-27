@@ -1,6 +1,6 @@
 # Amazon Photos API
 
-An unofficial Python library for listing, uploading, downloading and organizing media in Amazon Photos. It uses the web application's private endpoints and credentials from your own browser session. See [authentication and live verification](docs/authentication.md) for the available UK evidence.
+An unofficial Python library for listing, uploading, downloading and organizing media in Amazon Photos. It uses the web application's private endpoints and credentials from your own browser session.
 
 ## Installation
 
@@ -78,7 +78,7 @@ AP_COOKIES_FILE=/path/to/uk.cookies.json AP_TLD=co.uk python examples/upload_one
 
 The example exits with status 0 for a confirmed upload or verified existing copy, 2 when login is needed, 3 when Amazon may have received a write whose result could not be verified, and 1 for other failures.
 
-- `AuthenticationError` indicates the session was rejected or a recognized verification page was returned. Pause uploads, sign in normally, replace the secret and start a new client. There is no verified automatic renewal mechanism for UK Amazon Photos.
+- `AuthenticationError` indicates that Amazon rejected the session or asked for verification. Pause uploads, sign in again if prompted, export fresh cookies, and start a new client. Automatic renewal of expired UK credentials is unverified.
 - `APIError` exposes a status code and `Retry-After`, if available. A generic 403 is distinct from a confirmed rejected session.
 - `TransportError` indicates an HTTP transfer failed. Reads use bounded retries and backoff for transient errors.
 - `UploadUncertainError` means the upload may have been committed. Keep the source and look up the remote checksum before retrying. In a batch, earlier files may already have succeeded.
@@ -94,11 +94,13 @@ AP_LIVE=1 python -m unittest discover -s tests/live -v
 AP_LIVE=1 AP_LIVE_UPLOAD=1 python -m unittest discover -s tests/live -v
 ```
 
-The first command uses synthetic cookies and mocked HTTP. The second requires a private cookie file and performs real reads. The third adds one generated test image and leaves it available for inspection. See [live test setup and the longevity protocol](docs/authentication.md). A live UK run verified authentication, photo listing, credential reuse across processes, and CDProxy uploads and downloads with checksum verification. The duplicate check left one matching remote node. Session lifetime and Echo Show display remain unverified.
+The ordinary suite runs offline. For live tests, set `AP_COOKIES_FILE` to the private cookie file and `AP_TLD` if the account is outside the UK. The write test leaves one generated PNG in the account. Set `AP_EXPIRED_COOKIES_FILE` to a separate, known-expired capture to test session rejection.
+
+A live UK run verified sign-in, photo listing, cookie reuse across processes, and checksum-verified upload, duplicate handling, and download. Session lifetime and Echo Show display remain unverified.
 
 Node and trash listings have an upstream window of 9,999 rows. Use narrower filters for larger inventories. Remote indexing is eventually consistent, and a listing can change between pages. Cross-process uploads do not offer an exactly-once guarantee. Public methods are synchronous, with bounded internal async batches. In an asyncio application, use a worker thread for the synchronous API. This client depends on private endpoints that may change.
 
-See the [upstream PR audit](docs/upstream-audit.md), [implementation comparison](docs/alternative-implementations.md), [code audit](docs/code-audit.md) and [maintenance plan](docs/maintenance-plan.md). The library retains its [MIT licence](LICENSE).
+Licensed under the [MIT licence](LICENSE).
 
 ## Search
 

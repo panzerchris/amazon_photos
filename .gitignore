@@ -159,7 +159,8 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# Local Amazon Photos credentials, cache, and diagnostic exports
+# Local maintenance notes and Amazon Photos data
+/.audit/
 cookies.json
 *.cookies.json
 *.parquet
