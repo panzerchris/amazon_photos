@@ -1,22 +1,20 @@
 # Amazon Photos API
 
-An unofficial Python library for listing, uploading, downloading and organizing media in Amazon Photos. It uses the web application's private endpoints and credentials from your own browser session.
+An unofficial Python client for uploading, downloading, and organizing photos and videos in Amazon Photos.
 
 ## Installation
 
-Install from a checkout of this fork on CPython 3.11–3.14.
+Requires Python 3.11 or newer. Run this in the repository root.
 
 ```sh
 python -m pip install .
 ```
 
-Use `python -m pip install '.[extras]'` to install the optional image-labeling dependencies.
+For the optional [image-labeling tools](#custom-image-labeling-optional), use `python -m pip install '.[extras]'`.
 
-## Authentication and region
+## Authentication
 
-Sign in to [Amazon Photos UK](https://www.amazon.co.uk/photos) in your browser and complete any requested verification. In browser Developer Tools, select a successful Photos request in the Network tab. In the request's Cookie header, find `session-id`, `ubid-acbuk` and `at-acbuk`. Network request headers can show HttpOnly cookies that browser JavaScript cannot access.
-
-Save the corresponding values as a plain JSON object in a private file outside the repository. This example contains placeholders.
+Sign in to [Amazon Photos](https://www.amazon.co.uk/photos) for your region. Open your browser’s Developer Tools, go to **Network**, and look at the `Cookie` header on a successful Photos request. Save your cookie values in a private JSON file outside the repository. For a UK account, the file looks like this.
 
 ```json
 {
@@ -26,19 +24,19 @@ Save the corresponding values as a plain JSON object in a private file outside t
 }
 ```
 
-Give the file user-only access, such as `chmod 600 /path/to/uk.cookies.json` on Unix. Set `AP_COOKIES_FILE` to its path for the examples. Pass the mapping directly to `AmazonPhotos` when loading secrets from another source.
+Give the file user-only access. On macOS or Linux, use `chmod 600 /path/to/uk.cookies.json`. Set `AP_COOKIES_FILE` to the path for the examples and live tests.
 
-| Marketplace | `tld` | Common cookie pair | Default upload zone |
-| --- | --- | --- | --- |
-| UK | `co.uk` | `ubid-acbuk`, `at-acbuk` | EU |
-| US | `com` | `ubid-main`, `at-main` | NA |
-| Canada | `ca` | `ubid-acbca`, `at-acbca` | NA |
-| Germany | `de` | `ubid-acbde`, `at-acbde` | EU |
-| Japan | `co.jp` | `ubid-acbjp`, `at-acbjp` | JP |
+| Region | `tld` | Cookie pair alongside `session-id` |
+| --- | --- | --- |
+| UK | `co.uk` | `ubid-acbuk`, `at-acbuk` |
+| US | `com` | `ubid-main`, `at-main` |
+| Canada | `ca` | `ubid-acbca`, `at-acbca` |
+| Germany | `de` | `ubid-acbde`, `at-acbde` |
+| Japan | `co.jp` | `ubid-acbjp`, `at-acbjp` |
 
-One unambiguous marketplace can also be inferred from the cookie names. Legacy underscore aliases are accepted. Override endpoints with `drive_override` and `cdproxy_override` only for endpoints you trust with the session. `upload_api='v2'` selects the optional marketplace v2 endpoint, and `upload_override` selects a known compatible URL. No automatic fallback occurs after a write. Use `user_agent` to pass the user agent from your browser if the default profile does not work.
+The client can infer the region from the cookie names. Legacy cookie names with underscores also work.
 
-## Upload and download
+## Usage
 
 ```python
 import json
@@ -49,62 +47,58 @@ from amazon_photos import AmazonPhotos
 
 cookies = json.loads(Path(os.environ["AP_COOKIES_FILE"]).expanduser().read_text())
 
-with AmazonPhotos(
-    cookies,
-    tld="co.uk",
-    init_folders=False,
-    init_db=False,
-    db_path=None,
-) as photos:
-    receipts = photos.upload("new-photo.jpg", refresh=False, max_connections=1)
-    for receipt in receipts:
-        node = receipt.json()
-        print(node.get("id") or node["nodeId"])
+with AmazonPhotos(cookies, tld="co.uk", init_db=False, init_folders=False) as photos:
+    photos.upload("photo.jpg", refresh=False)
 
-    matches = photos.photos(limit=5)
-    if not matches.empty:
-        photos.download(matches["id"], out="downloaded", verify_checksum=True)
+    recent = photos.photos(limit=5)
+    if not recent.empty:
+        photos.download(recent["id"], out="downloads")
 ```
 
-A single file uploads to the account root unless you supply `parent_id`. A directory copies its local structure. The default upload checks Amazon for available files with the same MD5 and skips matching content account-wide. An empty response list means no new file was uploaded. An explicit `md5s` set substitutes caller-owned deduplication input. `skip_dedup=True` disables preflight deduplication. A filename conflict only counts as an existing copy if remote metadata confirms the checksum. The client streams the source bytes without re-encoding media or altering EXIF.
+A single file uploads to the root unless you pass `parent_id`. A directory keeps its folder structure. The client skips a file if Amazon already has a copy with the same checksum. The upload returns HTTP responses for newly uploaded files. Pass `verify_checksum=True` to `download()` to check downloaded files against Amazon’s checksums.
 
-Downloads write complete files atomically. `verify_checksum=True` requires a remote checksum and verifies it before publishing a local file. `query`, `photos`, `videos` and `trashed` return Pandas DataFrames. `nodes` returns a DataFrame or `None` if no rows match. Use distinct cache files for distinct accounts if you enable Parquet caching. With both initialization flags disabled, startup checks the account root and skips the eager scans.
+The client can skip its initial folder and cache scans with `init_folders=False` and `init_db=False`, as shown above. Use a separate Parquet cache file for each account. For custom endpoints, use `drive_override` or `upload_override` with hosts you trust to receive your cookies. Set `upload_api="v2"` to try the alternative upload format.
 
-## Unattended execution and errors
+For scripts or scheduled jobs, use the [single-file upload example](examples/upload_one.py).
 
 ```sh
-AP_COOKIES_FILE=/path/to/uk.cookies.json AP_TLD=co.uk python examples/upload_one.py /path/to/image.jpg
+AP_COOKIES_FILE=/path/to/uk.cookies.json python examples/upload_one.py /path/to/photo.jpg
 ```
 
-The example exits with status 0 for a confirmed upload or verified existing copy, 2 when login is needed, 3 when Amazon may have received a write whose result could not be verified, and 1 for other failures.
+### Handling errors
 
-- `AuthenticationError` indicates that Amazon rejected the session or asked for verification. Pause uploads, sign in again if prompted, export fresh cookies, and start a new client. Automatic renewal of expired UK credentials is unverified.
-- `APIError` exposes a status code and `Retry-After`, if available. A generic 403 is distinct from a confirmed rejected session.
-- `TransportError` indicates an HTTP transfer failed. Reads use bounded retries and backoff for transient errors.
-- `UploadUncertainError` means the upload may have been committed. Keep the source and look up the remote checksum before retrying. In a batch, earlier files may already have succeeded.
-- `ProtocolError` indicates an unexpected response or integrity failure. Check the endpoint, credentials and supported request format.
+- `AuthenticationError` means Amazon rejected the session or asked for verification. Pause uploads, open Photos in your browser, sign in again if prompted, and start a new client with fresh cookies.
+- `UploadUncertainError` means Amazon may have received the file. Keep the original and verify whether it exists remotely before retrying.
+- `APIError` reports the HTTP status. `TransportError` reports network failures, and `ProtocolError` reports unexpected responses.
 
-The client does not configure global logging. Use the `amazon_photos` logger for retry diagnostics. Keep HTTP client tracing and the optional `tmp` response snapshots off for routine runs because they can contain signed links or private metadata. TLS verification is enabled. System proxy settings are used only with `trust_env=True`.
+The upload example exits with 0 on success, 2 for authentication errors, 3 for uncertain uploads, and 1 for other errors.
 
-## Tests and limits
+## Tests
+
+CI tests Python 3.11–3.14. The default suite runs offline.
 
 ```sh
 python -m unittest discover -s tests -v
+```
+
+To run the live tests, set `AP_COOKIES_FILE` and, for accounts outside the UK, `AP_TLD`. The first command checks authentication and reads. The second also uploads one generated PNG and leaves it in your library.
+
+```sh
 AP_LIVE=1 python -m unittest discover -s tests/live -v
 AP_LIVE=1 AP_LIVE_UPLOAD=1 python -m unittest discover -s tests/live -v
 ```
 
-The ordinary suite runs offline. For live tests, set `AP_COOKIES_FILE` to the private cookie file and `AP_TLD` if the account is outside the UK. The write test leaves one generated PNG in the account. Set `AP_EXPIRED_COOKIES_FILE` to a separate, known-expired capture to test session rejection.
+Set `AP_EXPIRED_COOKIES_FILE` to a separate file with known-expired cookies to test session rejection.
 
-A live UK run verified sign-in, photo listing, cookie reuse across processes, and checksum-verified upload, duplicate handling, and download. Session lifetime and Echo Show display remain unverified.
+## Limitations
 
-Node and trash listings have an upstream window of 9,999 rows. Use narrower filters for larger inventories. Remote indexing is eventually consistent, and a listing can change between pages. Cross-process uploads do not offer an exactly-once guarantee. Public methods are synchronous, with bounded internal async batches. In an asyncio application, use a worker thread for the synchronous API. This client depends on private endpoints that may change.
+Amazon can change these private endpoints. Uploads, downloads, and duplicate handling were verified on one UK account. Automatic session renewal and Echo Show display remain unverified. Node and trash listings have a 9,999-item window. Use narrower filters for larger libraries.
+
+The public API is synchronous. If your application uses asyncio, call it from a worker thread. Use the `amazon_photos` logger for diagnostics, and keep raw HTTP tracing off when using real credentials.
 
 Licensed under the [MIT licence](LICENSE).
 
 ## Search
-
-*Undocumented API, current endpoints valid Dec 2023.*
 
 For valid **location** and **people** IDs, see the results from the `aggregations()` method.
 
