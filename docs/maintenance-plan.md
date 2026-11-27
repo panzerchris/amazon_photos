@@ -1,6 +1,6 @@
 # Amazon Photos fork maintenance
 
-Started 2026-11-27 from fork main `7cf3f5e` on `codex/amazon-photos-maintenance`. Upstream main was `685c965`. The fork was eight commits ahead and zero behind, with UK Drive routing and the commits from upstream PRs #16–19. The work stays on the local integration branch.
+Started 2026-11-27 from fork main `7cf3f5e` on `codex/amazon-photos-maintenance`. Upstream main was `685c965`. The fork was eight commits ahead and zero behind, with UK Drive routing and the commits from upstream PRs #16–19. The integration branch targets the fork’s main branch for review.
 
 ## Integration sequence
 
@@ -36,4 +36,4 @@ Python 3.11 is the minimum because CPython 3.10 reached upstream end of life in 
 4. Reconcile uncertain writes by checksum before replay. Concurrent writers and eventual indexing mean that remote exactly-once delivery cannot be guaranteed. Keep one Parquet writer per snapshot.
 5. Track live endpoint and cookie behavior using sanitized evidence. Never attach cookie files, private media, signed URLs or raw HTTP captures.
 
-No changes have been pushed or published. The repository maintenance excludes downstream service implementation.
+The package remains unpublished. The repository maintenance excludes downstream service implementation.
