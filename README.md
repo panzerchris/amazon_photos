@@ -58,7 +58,8 @@ with AmazonPhotos(
 ) as photos:
     receipts = photos.upload("new-photo.jpg", refresh=False, max_connections=1)
     for receipt in receipts:
-        print(receipt.json()["id"])
+        node = receipt.json()
+        print(node.get("id") or node["nodeId"])
 
     matches = photos.photos(limit=5)
     if not matches.empty:

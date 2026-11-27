@@ -224,13 +224,25 @@ class ClientTests(unittest.TestCase):
 
         def handler(request):
             args = request.url.params
-            requested.append((int(args['offset']), int(args['limit'])))
-            return page([], 12000)
+            offset, limit = int(args['offset']), int(args['limit'])
+            requested.append((offset, limit))
+            return page([{'id': str(i)} for i in range(offset, offset + limit)], 12000)
 
         ap = self.client(handler)
-        self.assertIsNone(ap.nodes(limit=math.inf, offset=9798))
+        self.assertEqual(len(ap.nodes(limit=math.inf, offset=9798)), 201)
         self.assertEqual(requested, [(9798, 200), (9998, 1)])
         self.assertTrue(ap.nodes_by_name([]).empty)
+        empty = self.client(lambda request: page([]))
+        self.assertIsNone(empty.nodes())
+
+    def test_pagination_raises_on_unexpected_empty_page(self):
+        def handler(request):
+            offset = int(request.url.params['offset'])
+            return page([] if offset else [{'id': 'first'}], 202)
+
+        ap = self.client(handler)
+        with self.assertRaises(ProtocolError):
+            ap.photos(limit=202)
 
     def test_media_search_retains_pagination_past_drive_window(self):
         requests = []
@@ -369,6 +381,12 @@ class ClientTests(unittest.TestCase):
                 with self.client(handler, upload_api=mode) as ap:
                     self.assertEqual(ap.upload(file, refresh=False), [])
                 self.assertEqual(len(sent), 1)
+
+    def test_upload_preserves_node_id_variant_and_normalizes_cache(self):
+        ap = self.client(lambda request: httpx.Response(201, json={'nodeId': 'created'}))
+        results = ap.upload(self.image(), md5s=set())
+        self.assertEqual(results[0].json(), {'nodeId': 'created'})
+        self.assertEqual(ap.db.id.tolist(), ['created'])
 
     def test_upload_429_reopens_stream(self):
         sent = []

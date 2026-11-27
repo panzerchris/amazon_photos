@@ -70,7 +70,8 @@ class AmazonPhotosLiveTests(unittest.TestCase):
             print(f'\nSynthetic image name for manual Echo Show verification: {image.name}', flush=True)
             receipts = ap.upload(image, refresh=False, max_connections=1)
             self.assertEqual(len(receipts), 1)
-            node_id = receipts[0].json()['id']
+            receipt = receipts[0].json()
+            node_id = receipt.get('id') or receipt['nodeId']
             self.assertRegex(node_id, r'^[A-Za-z0-9_-]+$')
             deadline = time.monotonic() + 60
             verified = False

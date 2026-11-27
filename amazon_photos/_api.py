@@ -347,6 +347,8 @@ class AmazonPhotos:
         if not isinstance(count, int) or count < 0:
             raise ProtocolError("Expected an Amazon Photos node count.")
         end = min(count, offset + available)
+        if not rows and offset < end:
+            raise ProtocolError("Amazon Photos returned an empty page before the advertised end of the listing.")
         if window is not None and count > window and limit > window - offset:
             logger.warning("Amazon Photos caps this listing at %d nodes. Use narrower filters for complete results.", window)
         if offset + size < end:
@@ -355,7 +357,10 @@ class AmazonPhotos:
                 for start in range(offset + size, end, MAX_LIMIT)
             )
             for page in asyncio.run(self.process(fns, desc='Listing nodes', **kwargs)):
-                rows.extend(self._page_data(page))
+                page_rows = self._page_data(page)
+                if not page_rows:
+                    raise ProtocolError("Amazon Photos returned an empty page before the advertised end of the listing.")
+                rows.extend(page_rows)
         return format_nodes(pd.json_normalize(rows if available == math.inf else rows[:available]))
 
     async def q(self, client: AsyncClient, sem: asyncio.Semaphore, filters: str, offset: int, limit: int = MAX_LIMIT) -> dict:
@@ -454,15 +459,21 @@ class AmazonPhotos:
                     params['kind'] = 'FILE'
                     headers['content-type'] = guess_type(file.name)[0] or 'application/octet-stream'
 
+                sent = False
+
                 async def send():
+                    nonlocal sent
+                    sent = False
                     async with aiofiles.open(file, 'rb') as source:
                         async def body():
+                            nonlocal sent
                             digest = md5(usedforsecurity=False)
                             while chunk := await source.read(chunk_size):
                                 digest.update(chunk)
                                 yield chunk
                             if digest.hexdigest() != checksum:
                                 raise UploadUncertainError(f"File changed while uploading {file.name}. Check Amazon Photos before retrying.")
+                            sent = True
 
                         return await client.post(
                             self.upload_url,
@@ -478,8 +489,11 @@ class AmazonPhotos:
                             return None
                         raise APIError(409, 'POST')
                     node = response_json(response)
-                    if not isinstance(node.get('id'), str) or not re.fullmatch(r'[A-Za-z0-9_-]+', node['id']):
+                    node['id'] = node.get('id') or node.get('nodeId')
+                    if not isinstance(node['id'], str) or not re.fullmatch(r'[A-Za-z0-9_-]+', node['id']):
                         raise ProtocolError("Amazon Photos did not return an uploaded node ID.")
+                    if not sent:
+                        raise ProtocolError("Amazon Photos replied before the upload stream was complete.")
                     remote_md5 = (node.get('contentProperties') or {}).get('md5')
                     if remote_md5 and (not isinstance(remote_md5, str) or remote_md5.lower() != checksum):
                         raise ProtocolError("Amazon Photos reported a different checksum for the uploaded node.")
@@ -491,17 +505,17 @@ class AmazonPhotos:
                     raise UploadUncertainError(
                         f"Amazon may have received {file.name}. Verify the remote copy by checksum before retrying."
                     ) from error
-                return response
+                return response, node
 
             fns = (
                 partial(post, file=file, checksum=checksum, destination=folder_map[file.parent])
                 for file, checksum in selected
             )
-            responses = asyncio.run(self.process(fns, desc='Uploading files', **kwargs))
-            responses = [response for response in responses if response is not None]
-            if refresh and responses:
-                self._merge_db(pd.json_normalize([response_json(response) for response in responses]))
-            return responses
+            results = asyncio.run(self.process(fns, desc='Uploading files', **kwargs))
+            completed = [result for result in results if result is not None]
+            if refresh and completed:
+                self._merge_db(pd.json_normalize([node for _, node in completed]))
+            return [response for response, _ in completed]
 
     def _verify_conflict(self, response, checksum):
         try:
@@ -1053,16 +1067,20 @@ class AmazonPhotos:
             folders.extend(rows)
             token = page.get('nextToken')
             if token:
+                if not rows:
+                    raise ProtocolError("Amazon Photos returned a folder pagination token without any folders.")
                 if not isinstance(token, str) or token in tokens:
                     raise ProtocolError("Amazon Photos repeated a folder pagination token.")
                 tokens.add(token)
                 continue
             offset += len(rows)
-            if tokens or offset >= page.get('count', offset):
+            count = page.get('count', offset)
+            if not isinstance(count, int) or count < 0:
+                raise ProtocolError("Expected an Amazon Photos folder count.")
+            if tokens or offset >= count:
                 return folders
-            if not rows or offset >= MAX_NODES:
+            if not rows:
                 raise ProtocolError("Amazon Photos folder listing ended before all folders were read.")
-            params['limit'] = min(MAX_LIMIT, MAX_NODES - offset)
 
     def get_folders(self) -> list[dict]:
         """Traverse folders by breadth without swallowing failed requests."""

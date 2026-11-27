@@ -25,7 +25,8 @@ def main():
         ) as photos:
             receipts = photos.upload(args.image, refresh=False, max_connections=1)
             if receipts:
-                print(f"Uploaded node {receipts[0].json()['id']}")
+                node = receipts[0].json()
+                print(f"Uploaded node {node.get('id') or node['nodeId']}")
             else:
                 print('A matching image is already available in Amazon Photos.')
         return 0
