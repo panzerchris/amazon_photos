@@ -8,9 +8,9 @@
 
 ## What can renew
 
-- **Short-lived browser cookies.** The German webcam archiver reports collecting `Set-Cookie` rotations of `session-id` and `session-token` during ordinary Photos requests while the user still has a valid sign-in. Its author treats loss of the underlying `at-acbde` credential as requiring a fresh login. This is one downstream project's German-marketplace evidence. It does not establish how long UK upload access lasts. [German rotation implementation](https://github.com/CarstenRI/webcam-archiver-multi-storage/blob/fea880d9ffe3f4e59f0493444628d99b02db60b7/app/amazon_session.py)
+- **Short-lived browser cookies.** The German webcam archiver reports collecting `Set-Cookie` rotations of `session-id` and `session-token` during ordinary Photos requests while the user still has a valid sign-in. Its author treats loss of the underlying `at-acbde` credential as requiring a fresh login. This is one downstream project's German-marketplace evidence. The controlled UK probe below confirms short-session recovery for reads on one UK account. [German rotation implementation](https://github.com/CarstenRI/webcam-archiver-multi-storage/blob/fea880d9ffe3f4e59f0493444628d99b02db60b7/app/amazon_session.py)
 - **Amazon's first-party app credentials.** A 2024 study observed refresh tokens in Amazon's Photos and Alexa companion apps, and documented app access to EU Photos metadata using an access-token header. The study covers app-issued credentials and read endpoints. It leaves UK browser-cookie renewal, current upload access and a supported third-party grant unverified. [DFRWS Echo Show 15 study, §§5.1.2, 5.2.1 and 5.2.4](https://dfrws.org/wp-content/uploads/2024/07/dfrws-usa-2024-echo-show-15.pdf)
-- **Public developer credentials and the private Photos token route.** Login with Amazon documents OAuth refresh and consumer profile scopes. No Photos upload scope appears in that documented grant. The upstream library's Canadian `/photos/auth/token` experiment failed to update its cookies, and its open refresh issue has no confirmed solution. Credential-free probes of the UK and Canadian token paths returned redirects or 503 responses. The responses provide no evidence that the route can restore an expired session. [Login with Amazon grant and scopes](https://developer.amazon.com/docs/login-with-amazon/authorization-code-grant.html), [upstream token probe](https://github.com/trevorhobenshield/amazon_photos/blob/685c965b5a4ba1ac85d418820ad200e12c18a46d/amazon_photos/_api.py), [upstream refresh question](https://github.com/trevorhobenshield/amazon_photos/issues/21)
+- **Public developer credentials and the private Photos token route.** Login with Amazon documents OAuth refresh and consumer profile scopes. No Photos upload scope appears in that documented grant. The upstream library's Canadian `/photos/auth/token` experiment failed to update its cookies, and its open refresh issue has no confirmed solution. Credential-free probes of the UK and Canadian token paths returned redirects or 503 responses. With a working UK session, the token route returned HTTP 404 and supplied no access or refresh token. [Login with Amazon grant and scopes](https://developer.amazon.com/docs/login-with-amazon/authorization-code-grant.html), [upstream token probe](https://github.com/trevorhobenshield/amazon_photos/blob/685c965b5a4ba1ac85d418820ad200e12c18a46d/amazon_photos/_api.py), [upstream refresh question](https://github.com/trevorhobenshield/amazon_photos/issues/21)
 
 ## Runtime behavior
 
@@ -44,6 +44,19 @@ For Echo Show, choose the relevant Amazon Photos source in the device's Photo Di
 On one UK account, fresh browser cookies authenticated the root and supported a photo listing. A fresh Python process reused the same private cookie file. Using the default EU CDProxy endpoint, the test uploaded one generated 64×64 PNG and verified its remote node and MD5. A second upload call with a fresh client skipped the matching bytes, and a subsequent lookup returned exactly one matching node. A separate check resolved the same image by exact filename, downloaded only that node, and independently matched the downloaded bytes against the remote MD5. The remote test image was left in the account for manual display verification.
 
 The known-expired session test was skipped because no expired capture was supplied. The run establishes reuse immediately across a restart. Session longevity, automatic renewal, and appearance on an Echo Show remain open.
+
+## UK cookie recovery probe, 2026-11-27
+
+The probe used the same account as the live upload check. All requests were read-only, took place in disposable in-memory cookie jars, and left the saved cookie file intact.
+
+| Request and starting state | Observed result |
+| --- | --- |
+| `GET https://www.amazon.co.uk/photos` with the working cookie capture | HTTP 200. Amazon sent `session-id`, `session-token` and `x-acbuk`. The `session-id` value matched the original capture. Amazon did not issue a new `at-acbuk`. |
+| `GET https://www.amazon.co.uk/photos/auth/token` with working cookies | HTTP 404. No access token or refresh token was returned. |
+| `GET https://www.amazon.co.uk/photos` with valid `at-acbuk` and `ubid-acbuk`, with no initial `session-id` | HTTP 200 and a new `session-id`. Using that new session ID in the cookie and the `x-amzn-sessionid` header allowed `GET /drive/v1/nodes?filters=isRoot:true` to read the account root. |
+| `GET https://www.amazon.co.uk/photos` after removing `at-acbuk` from that refreshed jar | HTTP 302. Amazon sent short session cookies and did not issue a new `at-acbuk`. The subsequent root read returned HTTP 401. |
+
+This verifies one way to reconstruct the short session for UK reads while the main authorization cookie is still valid. Uploads were not exercised with the reconstructed session. No naturally expired credential was used, so the probe does not establish whether a revoked or expired `at-acbuk` can be renewed. Treat that as a separate question from short-session recovery and measure it with the longitudinal protocol.
 
 ## Measuring session lifetime
 
