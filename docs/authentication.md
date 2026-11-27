@@ -33,11 +33,17 @@ AP_LIVE=1 AP_LIVE_UPLOAD=1 python -m unittest discover -s tests/live -v
 
 The read run checks root authentication, a small photo listing and reuse in a fresh Python process. The write run additionally adds one uniquely generated 64×64 PNG to the root, waits for its node and checksum to become visible, and attempts to upload the same bytes through a fresh client. It expects one remote node and no second upload receipt. The PNG remains in the account for inspection. The suite never trashes, purges or changes existing photos. Set `AP_EXPIRED_COOKIES_FILE` to a separate known-expired capture if available. It performs one read attempt and expects `AuthenticationError`. Set `AP_USER_AGENT` to the browser UA for a comparison if useful.
 
-Credential-free checks on 2026-11-27 returned 401 for the UK Drive root GET, 404 for an EU CDProxy HEAD, and 405 for a UK v2 HEAD. These show the hosts answered those requests. Upload compatibility depends on an authenticated POST.
+Earlier credential-free checks on 2026-11-27 returned 401 for the UK Drive root GET, 404 for an EU CDProxy HEAD, and 405 for a UK v2 HEAD. These show the hosts answered those requests. Upload compatibility depends on an authenticated POST.
 
-The first run uses EU CDProxy. With `AP_UPLOAD_API=v2`, a separate explicitly enabled write run uses `https://upload-photos.amazon.co.uk/v2/upload`. Use the printed synthetic filename to reconcile the first attempt before changing protocols after a timeout or ambiguous error. The formats are source-backed hypotheses for this account.
+The first run uses EU CDProxy. With `AP_UPLOAD_API=v2`, a separate explicitly enabled write run uses `https://upload-photos.amazon.co.uk/v2/upload`. Use the printed synthetic filename to reconcile the first attempt before changing protocols after a timeout or ambiguous error. The default EU CDProxy format passed the UK test below. V2 remains a source-backed alternative that has not been exercised with this account.
 
 For Echo Show, choose the relevant Amazon Photos source in the device's Photo Display settings, then check whether the named image appears in Amazon Photos web and subsequently on the device without changing its selected source. If the device uses a selected album, root visibility and album membership are separate. Add the synthetic image to that selected album via your normal UI if testing album display specifically. Record marketplace, device model, configured source, elapsed time and whether intervention was needed. [Amazon UK Photo Display setup](https://digprjsurvey.amazon.co.uk/csad/help/node/GX89AZF5HTVZCPT7)
+
+## UK live result, 2026-11-27
+
+On one UK account, fresh browser cookies authenticated the root and supported a photo listing. A fresh Python process reused the same private cookie file. Using the default EU CDProxy endpoint, the test uploaded one generated 64×64 PNG and verified its remote node and MD5. A second upload call with a fresh client skipped the matching bytes, and a subsequent lookup returned exactly one matching node. A separate check resolved the same image by exact filename, downloaded only that node, and independently matched the downloaded bytes against the remote MD5. The remote test image was left in the account for manual display verification.
+
+The known-expired session test was skipped because no expired capture was supplied. The run establishes reuse immediately across a restart. Session longevity, automatic renewal, and appearance on an Echo Show remain open.
 
 ## Measuring session lifetime
 
@@ -47,4 +53,4 @@ Compare a process retaining its in-memory jar with fresh processes reusing the o
 
 When a saved UK capture first fails, check Amazon Photos in the original browser profile. If the browser still works without prompting, take a fresh capture from that profile and repeat the UK read and synthetic write checks. Record whether the fresh capture restored access and whether the browser required each sign-in or verification step. This distinguishes a stale exported copy from a browser profile that also needs reauthentication.
 
-No authenticated endpoint or Echo Show behavior has been verified for this branch. The strongest existing UK evidence is a third-party metadata read. Long-running unattended use is feasible only while Amazon accepts the captured session, and the required manual refresh frequency remains unknown.
+Long-running unattended use is feasible while Amazon accepts the captured session. The UK live run establishes the upload and duplicate path for one fresh session. It does not establish how often a deployed client will need manual reauthentication.

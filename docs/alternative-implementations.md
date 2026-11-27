@@ -1,6 +1,6 @@
 # Other Amazon Photos implementations
 
-Source snapshots reviewed on 2026-11-27. “Reported live” below refers to evidence from those projects or their users. The integration branch has made no authenticated requests to Amazon.
+Source snapshots reviewed on 2026-11-27. “Reported live” below refers to evidence from those projects or their users. The fork’s own [UK live result](authentication.md#uk-live-result-2026-11-27) is tracked separately.
 
 ## Independent clients
 

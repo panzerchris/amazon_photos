@@ -94,7 +94,7 @@ AP_LIVE=1 python -m unittest discover -s tests/live -v
 AP_LIVE=1 AP_LIVE_UPLOAD=1 python -m unittest discover -s tests/live -v
 ```
 
-The first command uses synthetic cookies and mocked HTTP. The second requires a private cookie file and performs real reads. The third adds one generated test image and leaves it available for inspection. See [live test setup and the longevity protocol](docs/authentication.md). This branch has no authenticated UK upload, session lifetime or Echo Show verification yet.
+The first command uses synthetic cookies and mocked HTTP. The second requires a private cookie file and performs real reads. The third adds one generated test image and leaves it available for inspection. See [live test setup and the longevity protocol](docs/authentication.md). A live UK run verified authentication, photo listing, credential reuse across processes, and CDProxy uploads and downloads with checksum verification. The duplicate check left one matching remote node. Session lifetime and Echo Show display remain unverified.
 
 Node and trash listings have an upstream window of 9,999 rows. Use narrower filters for larger inventories. Remote indexing is eventually consistent, and a listing can change between pages. Cross-process uploads do not offer an exactly-once guarantee. Public methods are synchronous, with bounded internal async batches. In an asyncio application, use a worker thread for the synchronous API. This client depends on private endpoints that may change.
 

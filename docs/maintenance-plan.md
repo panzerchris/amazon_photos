@@ -23,14 +23,14 @@ Browser session reuse is the working model. Sustained UK upload success, lifetim
 | 3–4. Consolidation and code review | Consolidated regional and cookie fixes with the fork's original UK override. Implemented checked session and HTTP handling, bounded retries, streaming uploads, remote deduplication, incomplete-download handling, pagination, safe worker cleanup and atomic cache writes. [Code audit](code-audit.md) |
 | 5. Authentication | Traced cookie acquisition and cross-process reuse. Documented evidence of short-cookie rotation and Amazon's first-party refresh tokens. A supported way to renew a third-party UK browser session remains unverified. The longitudinal protocol now includes comparing a rejected capture with a fresh one from the same browser profile. [Authentication](authentication.md) |
 | 6. Automated tests | 30 credential-free tests pass with warnings treated as errors on macOS CPython 3.11, 3.12, 3.13 and 3.14. The suite also passes on 3.11 with Pandas 2.2.0, PyArrow 16.0.0, HTTPX 0.27.0, aiofiles 23.2.1, orjson 3.9.0, tqdm 4.66.0 and NumPy 1.26.4. Ruff and `git diff --check` pass. GitHub Actions is configured for the four versions on Linux. |
-| 7. Live API | Credential-free probes reached UK Drive (GET 401), EU CDProxy (HEAD 404) and UK v2 (HEAD 405). Those observations establish only HTTP reachability and expected protection of the metadata request. The four live checks discover and skip by default. Authenticated execution requires an opting-in account owner, and Echo Show display requires a configured device. |
+| 7. Live API | An opt-in UK account run on 2026-11-27 passed root authentication, photo listing and reuse after restart. One synthetic PNG uploaded through EU CDProxy, matched its remote MD5, was skipped as a duplicate by a fresh client, and downloaded with the same checksum. No known-expired capture was supplied. V2 upload, session lifetime and Echo Show display remain unverified. [Live result](authentication.md#uk-live-result-2026-11-27) |
 | 8. Packaging and documentation | PEP 517 build, source distribution, wheel install, import outside the checkout and `pip check` succeeded. Added a private-cookie-file upload example, live test instructions and migration details. |
 
 Python 3.11 is the minimum because CPython 3.10 reached upstream end of life in October 2026. The integration package version is `0.0.97.post1`.
 
 ## Open validation and trade-offs
 
-1. Run the opt-in UK read and write suite with a fresh browser session. Capture status classes and times, then verify the named synthetic PNG's checksum and Echo Show display. Leave the test artifact for manual inspection.
+1. Check whether the synthetic PNG left by the live UK run appears on the configured Echo Show.
 2. Run the session longevity protocol on the deployment host. Decide the acceptable reauthentication interval from the results. Browser sign-in remains the recoverable path when credentials expire.
 3. Verify the reported Japan and other marketplace routes as accounts are available. UK CDProxy remains the default. V2 is an explicit alternative for a separate trial.
 4. Reconcile uncertain writes by checksum before replay. Concurrent writers and eventual indexing mean that remote exactly-once delivery cannot be guaranteed. Keep one Parquet writer per snapshot.
